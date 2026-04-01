@@ -10,7 +10,9 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
 <style>
-/*
+/* ═══════════════════════════════════════
+   DESIGN TOKENS
+═══════════════════════════════════════ */
 :root {
   --bg: #f8f8f6;
   --bg2: #ffffff;
@@ -2277,53 +2279,186 @@ async function callAnalysis(text) {
 
 function offlineAnalysis(text) {
   var t = (text && text !== '__PDF__' ? text : '').toLowerCase();
-  var techSkills = ['python','java','javascript','react','node','sql','aws','docker','kubernetes','git','typescript','c++','c#','html','css','mongodb','postgresql','mysql','redis','graphql','rest','api','machine learning','tensorflow','pytorch','django','flask','spring','angular','vue','linux','devops','ci/cd','agile','scrum'];
-  var foundSkills = techSkills.filter(function(s) { return t.includes(s); });
-  var score = 30, strengths = [], weaknesses = [], suggestions = [];
-  var hasEmail = /\b[\w.-]+@[\w.-]+\.\w{2,}\b/.test(t);
-  var hasPhone = /(\+91|0)?[\s-]?[6-9]\d{9}/.test(t);
-  if (hasEmail) { score += 5; strengths.push('Contact email is present'); } else { weaknesses.push('No email address found'); suggestions.push({ text: 'Add a professional email address', category: 'format' }); }
-  if (hasPhone) { score += 5; } else { suggestions.push({ text: 'Add your phone number with +91 country code', category: 'format' }); }
-  var hasSummary = /summary|objective|profile|about/i.test(t);
-  var hasExp = /experience|work history|employment/i.test(t);
-  var hasEdu = /education|degree|university|college|b\.tech|m\.tech|bsc|msc|bca|mca/i.test(t);
-  var hasSkills = /skills|technologies|tools/i.test(t);
-  var hasProjects = /project|portfolio|built|developed/i.test(t);
-  if (hasSummary) { score += 8; strengths.push('Professional summary present'); } else { weaknesses.push('Missing professional summary'); suggestions.push({ text: 'Add a 3-line summary at the top', category: 'summary' }); }
-  if (hasExp) { score += 15; strengths.push('Work experience section detected'); } else { weaknesses.push('No work experience found'); suggestions.push({ text: 'Add a Professional Experience section', category: 'experience' }); }
-  if (hasEdu) { score += 10; } else { weaknesses.push('Education unclear or missing'); suggestions.push({ text: 'Add degree, institution and graduation year', category: 'education' }); }
-  if (hasSkills) { score += 8; }
-  if (hasProjects) { score += 7; strengths.push('Projects section present'); }
-  if (foundSkills.length >= 8) { score += 12; strengths.push('Strong technical skill set (' + foundSkills.length + ' skills detected)'); }
-  else if (foundSkills.length >= 4) { score += 7; }
-  else { weaknesses.push('Few technical skills detected'); suggestions.push({ text: 'List all technical skills in a dedicated Skills section', category: 'skills' }); }
-  var actionVerbs = ['led','built','designed','developed','implemented','improved','reduced','increased','managed','deployed','optimized'];
-  var verbCount = actionVerbs.filter(function(v) { return t.includes(v); }).length;
-  if (verbCount >= 4) { score += 8; strengths.push('Strong action verbs throughout'); }
-  else { suggestions.push({ text: 'Start bullets with action verbs: Led, Built, Optimized, Reduced, Increased', category: 'experience' }); }
-  var hasNumbers = /\d+%|\d+ (users|projects|teams|members|months|years)/.test(t);
-  if (hasNumbers) { score += 7; strengths.push('Quantified achievements boost credibility'); }
-  else { suggestions.push({ text: 'Add metrics — e.g. "Reduced load time by 40%" or "Managed team of 5"', category: 'experience' }); }
-  var hasLinkedIn = /linkedin/i.test(t), hasGithub = /github/i.test(t);
-  if (hasLinkedIn || hasGithub) { score += 5; } else { suggestions.push({ text: 'Add LinkedIn and GitHub profile URLs', category: 'format' }); }
-  score = Math.max(18, Math.min(92, score));
-  var bKw = ['node','python','django','flask','spring','java','sql','postgresql','mongodb','redis','api','rest'];
-  var fKw = ['react','angular','vue','html','css','javascript','typescript'];
-  var dKw = ['machine learning','tensorflow','pytorch','pandas','numpy','data','analytics','spark','hadoop'];
-  var dvKw = ['docker','kubernetes','aws','azure','gcp','ci/cd','devops','linux','git','jenkins','terraform'];
-  var radarScores = {
-    Backend: Math.min(95, bKw.filter(function(k) { return t.includes(k); }).length * 12),
-    Frontend: Math.min(95, fKw.filter(function(k) { return t.includes(k); }).length * 14),
-    Data: Math.min(95, dKw.filter(function(k) { return t.includes(k); }).length * 15),
-    DevOps: Math.min(95, dvKw.filter(function(k) { return t.includes(k); }).length * 14)
+  if (!t || t.length < 30) {
+    return { score: 0, isResume: false, verdict: 'Could not read the document. Please upload a PDF or DOCX resume.', strengths: [], weaknesses: ['Document unreadable'], suggestions: [], skills: [], radarScores: { Backend:0, Frontend:0, Data:0, DevOps:0 }, jobRoles: [], _offline: true };
+  }
+
+  // ── Detect industry from content ──
+  var isTech     = /python|java|javascript|react|node\.?js|sql|aws|docker|software engineer|developer|programmer|backend|frontend|devops|cloud|api|github/i.test(t);
+  var isHealth   = /doctor|mbbs|nursing|nurse|pharmacist|surgeon|dentist|physiotherapist|hospital|clinical|patient|medical|healthcare|bds|bpharm|md |mbbs/i.test(t);
+  var isLegal    = /lawyer|advocate|llb|llm|litigation|legal counsel|court|barrister|law firm|bar council|solicitor|legal drafting/i.test(t);
+  var isFinance  = /chartered accountant|\bca\b|cfa|financial analyst|investment banking|audit|taxation|gst|balance sheet|ifrs|nbfc|equity research|portfolio/i.test(t);
+  var isEdu      = /teacher|professor|lecturer|tutor|curriculum|classroom|pedagogy|b\.ed|m\.ed|teaching|school|college faculty/i.test(t);
+  var isMarketing= /marketing|seo|sem|social media|brand manager|campaign|content strateg|digital marketing|google ads|hubspot|crm/i.test(t);
+  var isDesign   = /ux designer|ui designer|figma|sketch|adobe xd|wireframe|prototype|user research|interaction design|visual design/i.test(t);
+  var isHR       = /human resources|\bhr\b|recruitment|talent acquisition|payroll|onboarding|employee relations|hris|performance management/i.test(t);
+
+  var industry = isTech ? 'tech' : isHealth ? 'healthcare' : isLegal ? 'legal' : isFinance ? 'finance' : isEdu ? 'education' : isMarketing ? 'marketing' : isDesign ? 'design' : isHR ? 'hr' : 'general';
+
+  // ── Skill banks per domain ──
+  var allSkillBanks = {
+    tech:      ['python','java','javascript','react','node.js','sql','aws','docker','kubernetes','git','typescript','c++','c#','html','css','mongodb','postgresql','mysql','redis','graphql','rest api','machine learning','tensorflow','pytorch','django','flask','spring boot','angular','vue.js','linux','devops','ci/cd','agile','scrum','microservices','kafka','spark','terraform','jenkins','next.js','express','fastapi','pandas','numpy'],
+    healthcare:['patient care','clinical assessment','emr','ehr','surgery','diagnosis','pharmacology','nursing care','icu management','critical care','medical coding','icd-10','telemedicine','patient counselling','ward management','anatomy','physiology','mbbs','bds','first aid','triage','infection control'],
+    legal:     ['litigation','legal research','contract drafting','due diligence','intellectual property','corporate law','criminal law','civil litigation','legal drafting','moot court','arbitration','mediation','llb','bar council','legal compliance','court filing','case management','legal documentation','mergers and acquisitions','dispute resolution'],
+    finance:   ['financial analysis','financial modeling','ms excel','tally','sap','ifrs','ind as','audit','taxation','gst','income tax','investment banking','equity research','portfolio management','risk management','cfa','ca','bloomberg','power bi','valuation','p&l','balance sheet','cash flow','derivatives','mutual funds'],
+    education: ['curriculum design','lesson planning','classroom management','student assessment','lms','e-learning','google classroom','blended learning','differentiated instruction','student counselling','academic research','b.ed','m.ed','ugc net','smart board','online teaching','content development','educational psychology'],
+    marketing: ['seo','sem','google ads','facebook ads','content marketing','email marketing','crm','hubspot','salesforce','brand management','market research','google analytics','social media marketing','a/b testing','conversion optimization','copywriting','influencer marketing','wordpress','mailchimp','canva'],
+    design:    ['figma','sketch','adobe xd','illustrator','photoshop','indesign','wireframing','prototyping','user research','usability testing','design systems','typography','color theory','interaction design','after effects','invision','zeplin','responsive design','accessibility','motion design'],
+    hr:        ['recruitment','talent acquisition','onboarding','payroll','hris','employee relations','performance management','learning and development','hr analytics','compensation','benefits','succession planning','organizational development','hr policies','workforce planning','darwinbox','zoho people','sap hr','interviewing','job description'],
+    general:   ['ms office','excel','powerpoint','word','communication','leadership','project management','team management','presentation','data analysis','research','strategic planning','problem solving','time management','negotiation','stakeholder management','report writing','budgeting']
   };
+
+  var domainSkills = allSkillBanks[industry] || allSkillBanks.general;
+  var generalSkills = allSkillBanks.general;
+  var foundSkills = domainSkills.filter(function(s) { return t.includes(s.toLowerCase()); });
+  generalSkills.forEach(function(s) { if (t.includes(s) && !foundSkills.includes(s)) foundSkills.push(s); });
+
+  var score = 28, strengths = [], weaknesses = [], suggestions = [];
+
+  // ── Contact info ──
+  var hasEmail     = /\b[\w.+-]+@[\w.-]+\.\w{2,}\b/.test(t);
+  var hasPhone     = /(\+91[\s-]?)?[6-9]\d{9}/.test(t);
+  var hasLinkedIn  = /linkedin/i.test(t);
+  var hasGithub    = /github/i.test(t);
+  var hasPortfolio = /portfolio|behance|dribbble|leetcode|hackerrank/i.test(t);
+
+  if (hasEmail)    { score += 5; } else { weaknesses.push('No email address found — critical for ATS parsing'); suggestions.push({ text: 'Add a professional email address (e.g. name@gmail.com)', category: 'format' }); }
+  if (hasPhone)    { score += 4; } else { suggestions.push({ text: 'Add your mobile number with +91 country code', category: 'format' }); }
+  if (hasLinkedIn) { score += 4; strengths.push('LinkedIn profile linked — boosts trust with recruiters'); } else { suggestions.push({ text: 'Add your LinkedIn profile URL — 87% of recruiters check it before calling', category: 'format' }); }
+  if (isTech && hasGithub)    { score += 4; strengths.push('GitHub profile present — strong proof of technical work'); }
+  else if (isTech && !hasGithub) { suggestions.push({ text: 'Add GitHub URL — essential for tech roles to showcase your actual code', category: 'format' }); }
+  if (isDesign && hasPortfolio) { score += 4; strengths.push('Portfolio link present — critical for design roles'); }
+
+  // ── Sections ──
+  var hasSummary      = /summary|objective|profile|about me|career objective|professional profile/i.test(t);
+  var hasExp          = /experience|work history|employment|internship|worked at|working at|professional background/i.test(t);
+  var hasEdu          = /education|degree|university|college|b\.tech|m\.tech|bsc|msc|bca|mca|mbbs|llb|b\.com|m\.com|mba|b\.ed|diploma|12th|10th|high school/i.test(t);
+  var hasSkillsSec    = /skills|technologies|tools|competencies|expertise|technical proficiency/i.test(t);
+  var hasProjects     = /project|portfolio|built|developed|created|designed|deployed|implemented/i.test(t);
+  var hasCerts        = /certification|certified|certificate|course|udemy|coursera|nptel|aws certified|google certified|microsoft certified/i.test(t);
+  var hasAchievements = /achievement|award|recognition|winner|rank|topper|honor|merit|scholarship|prize|distinction/i.test(t);
+  var hasVolunteer    = /volunteer|community|ngo|social work|extracurricular|club|committee|captain/i.test(t);
+
+  if (hasSummary) { score += 8; strengths.push('Professional summary present — helps recruiters quickly assess fit'); }
+  else            { weaknesses.push('Missing professional summary — this is the first thing recruiters read'); suggestions.push({ text: 'Add a 3-4 line summary: [Role] with [X years] in [domain]. [Top achievement]. [Key value you bring].', category: 'summary' }); }
+
+  if (hasExp)  { score += 14; strengths.push('Work experience section present'); }
+  else         { weaknesses.push('No work experience section found'); suggestions.push({ text: 'Add Professional Experience: Company | Role | Dates | 3-4 achievement bullets each', category: 'experience' }); }
+
+  if (hasEdu)  { score += 9; }
+  else         { weaknesses.push('Education section unclear or missing'); suggestions.push({ text: 'Add Education: Degree, Institution, Year of Graduation, CGPA or percentage', category: 'education' }); }
+
+  if (hasSkillsSec) { score += 7; }
+  else              { suggestions.push({ text: 'Add a dedicated Skills section grouped by category — ATS systems scan this first', category: 'skills' }); }
+
+  if (hasProjects) { score += 6; strengths.push('Projects section adds credibility for practical experience'); }
+  else if (!hasExp) { suggestions.push({ text: 'Add 2-3 projects with: tech used, your specific role, and measurable outcome', category: 'experience' }); }
+
+  if (hasCerts)        { score += 5; strengths.push('Certifications listed — adds verified, third-party credibility'); }
+  else                 { suggestions.push({ text: 'Add certifications — many are free: Google, AWS, HubSpot, Coursera, NPTEL', category: 'skills' }); }
+
+  if (hasAchievements) { score += 4; strengths.push('Achievements/awards section helps you stand out from similar candidates'); }
+  if (hasVolunteer)    { score += 2; }
+
+  // ── Skills depth ──
+  if (foundSkills.length >= 12)     { score += 13; strengths.push('Excellent skill depth: ' + foundSkills.length + ' relevant ' + industry + ' skills detected'); }
+  else if (foundSkills.length >= 7) { score += 9;  strengths.push(foundSkills.length + ' relevant skills detected across your domain'); }
+  else if (foundSkills.length >= 3) { score += 5; }
+  else { weaknesses.push('Very few ' + industry + '-relevant skills detected — ATS will likely filter this out'); suggestions.push({ text: 'Expand your skills section with specific tools, platforms and technologies relevant to ' + industry, category: 'skills' }); }
+
+  // ── Writing quality ──
+  var actionVerbs = ['led','built','designed','developed','implemented','improved','reduced','increased','managed','deployed','optimized','spearheaded','launched','delivered','achieved','collaborated','coordinated','streamlined','automated','negotiated','mentored','trained','resolved','analysed','analyzed','created','established','executed','drove','transformed','revamped','oversaw','supervised','facilitated','generated','secured','maintained'];
+  var verbCount = actionVerbs.filter(function(v) { return t.includes(v); }).length;
+  if (verbCount >= 6)      { score += 9; strengths.push('Strong action verbs used throughout — writing quality signals professionalism'); }
+  else if (verbCount >= 3) { score += 5; suggestions.push({ text: 'Use more action verbs to start bullets: Led, Built, Delivered, Optimized, Spearheaded', category: 'experience' }); }
+  else                     { suggestions.push({ text: 'Every bullet point should start with a strong action verb — avoid passive language like "responsible for"', category: 'experience' }); }
+
+  // ── Quantification ──
+  var hasNumbers  = /\d+\s*%|\d+\s*(users|projects|teams|members|months|years|clients|lpa|cr|lakhs|crore|revenue|students|patients|cases|deals|leads|hours|days|weeks|x |times)/i.test(t);
+  var hasMetrics  = /reduced|increased|improved|grew|achieved|delivered|generated|saved|scaled|boosted|cut|doubled|tripled/i.test(t);
+
+  if (hasNumbers)       { score += 9; strengths.push('Quantified achievements found — numbers dramatically boost recruiter response rates'); }
+  else if (hasMetrics)  { score += 3; suggestions.push({ text: 'You use result words but no numbers. Add specifics: "Improved performance by 35%" or "Saved 10 hours/week"', category: 'experience' }); }
+  else                  { suggestions.push({ text: 'Quantify every achievement with %, ₹, headcount, or time. e.g. "Managed 8-person team" or "Reduced costs by ₹2L"', category: 'experience' }); }
+
+  // ── Length check ──
+  var wordCount = t.split(/\s+/).filter(Boolean).length;
+  if (wordCount < 120)        { score -= 10; weaknesses.push('Resume is very short — key sections are likely missing'); }
+  else if (wordCount > 1400)  { suggestions.push({ text: 'Resume may be too long. Aim for 1 page (fresher/junior) or max 2 pages (senior roles)', category: 'format' }); }
+
+  // ── Format signals ──
+  var hasTable = /\|[\w\s]+\|/.test(t);
+  if (hasTable) { suggestions.push({ text: 'Avoid tables — most ATS systems cannot parse them and will scramble your content', category: 'format' }); }
+
+  // ── Experience level ──
+  var expYears = 0;
+  var yrMatch = t.match(/(\d+)\+?\s*years?\s*(of\s*)?(experience|exp)/i);
+  if (yrMatch) expYears = parseInt(yrMatch[1]);
+  var isFresher = /fresher|fresh graduate|recently graduated|entry.level|0.*year|no experience/i.test(t);
+  var expLevel  = isFresher ? 'Fresher' : expYears >= 10 ? 'Lead/Principal' : expYears >= 6 ? 'Senior' : expYears >= 3 ? 'Mid-level' : expYears >= 1 ? 'Junior' : 'Fresher/Entry';
+
+  // ── Radar scores ──
+  var bKw  = ['node','node.js','python','django','flask','spring','spring boot','java','sql','postgresql','mongodb','redis','rest api','graphql','microservices','kafka','go','php','ruby','fastapi','express'];
+  var fKw  = ['react','angular','vue','vue.js','html','css','javascript','typescript','next.js','tailwind','webpack','redux','sass','svelte','jquery'];
+  var dKw  = ['machine learning','tensorflow','pytorch','pandas','numpy','data','analytics','spark','hadoop','tableau','power bi','nlp','computer vision','scikit','sklearn','matplotlib','seaborn','airflow','databricks'];
+  var dvKw = ['docker','kubernetes','aws','azure','gcp','ci/cd','devops','linux','git','jenkins','terraform','ansible','helm','prometheus','grafana','nginx','bash'];
+
+  var radarScores = {
+    Backend: Math.min(95, bKw.filter(function(k) { return t.includes(k); }).length * 10),
+    Frontend: Math.min(95, fKw.filter(function(k) { return t.includes(k); }).length * 12),
+    Data: Math.min(95, dKw.filter(function(k) { return t.includes(k); }).length * 11),
+    DevOps: Math.min(95, dvKw.filter(function(k) { return t.includes(k); }).length * 12)
+  };
+
+  // For non-tech, give domain score using found skills
+  if (!isTech && foundSkills.length > 0) {
+    var domainScore = Math.min(85, foundSkills.length * 8);
+    var topKey = Object.keys(radarScores).reduce(function(a,b) { return radarScores[a] > radarScores[b] ? a : b; });
+    radarScores[topKey] = Math.max(radarScores[topKey], domainScore);
+  }
+
+  // ── Job roles ──
   var topDomain = Object.entries(radarScores).sort(function(a,b) { return b[1]-a[1]; })[0][0];
-  var roleMap = { Backend: ['Backend Developer','Software Engineer','Full Stack Developer'], Frontend: ['Frontend Developer','UI Engineer','React Developer'], Data: ['Data Analyst','ML Engineer','Data Scientist'], DevOps: ['DevOps Engineer','Cloud Engineer','SRE'] };
-  var jobRoles = roleMap[topDomain] || ['Software Engineer','Developer','Engineer'];
-  if (suggestions.length < 4) suggestions.push({ text: 'Use single-column ATS-friendly format — avoid tables, graphics, and columns', category: 'format' });
-  var vs = score >= 70 ? 'strong' : score >= 50 ? 'decent' : 'needs improvement';
-  var verdict = 'This resume has a ' + vs + ' foundation with ' + foundSkills.length + ' technical skills detected. ' + (hasNumbers ? 'Good use of quantified achievements.' : 'Adding metrics would significantly improve impact.') + (hasSummary ? '' : ' A professional summary is missing.');
-  return { score: score, isResume: true, verdict: verdict, strengths: strengths.slice(0,5), weaknesses: weaknesses.slice(0,4), suggestions: suggestions.slice(0,6), skills: foundSkills.slice(0,16), radarScores: radarScores, jobRoles: jobRoles, _offline: true };
+  var roleMap = {
+    Backend:  ['Backend Developer','Software Engineer','Full Stack Developer','API Developer','Java/Python Developer'],
+    Frontend: ['Frontend Developer','React Developer','UI Engineer','Web Developer','Full Stack Developer'],
+    Data:     ['Data Analyst','ML Engineer','Data Scientist','Business Intelligence Analyst','Analytics Engineer'],
+    DevOps:   ['DevOps Engineer','Cloud Engineer','SRE','Platform Engineer','Infrastructure Engineer']
+  };
+  var domainRoles = {
+    healthcare: ['Medical Officer','Clinical Associate','Healthcare Consultant','Hospital Administrator','Resident Doctor'],
+    legal:      ['Legal Associate','Corporate Lawyer','Litigation Advocate','Legal Counsel','Compliance Officer'],
+    finance:    ['Financial Analyst','Investment Analyst','Audit Associate','Finance Manager','Risk Analyst'],
+    education:  ['Teacher','Academic Coordinator','Curriculum Designer','Lecturer','Education Consultant'],
+    marketing:  ['Digital Marketing Executive','SEO Specialist','Brand Manager','Content Strategist','Growth Marketer'],
+    design:     ['UX Designer','Product Designer','UI Designer','Visual Designer','UX Researcher'],
+    hr:         ['HR Executive','Talent Acquisition Specialist','HR Business Partner','Recruiter','HR Generalist'],
+    general:    ['Business Analyst','Operations Manager','Project Coordinator','Management Trainee','Strategy Analyst']
+  };
+  var jobRoles = isTech ? (roleMap[topDomain] || roleMap.Backend) : (domainRoles[industry] || domainRoles.general);
+
+  // ── Verdict ──
+  score = Math.max(18, Math.min(93, score));
+  var vs = score >= 75 ? 'strong' : score >= 58 ? 'solid' : score >= 42 ? 'moderate' : 'weak';
+  var verdict = 'This ' + industry + ' resume shows a ' + vs + ' foundation';
+  verdict += expLevel !== 'Fresher/Entry' ? ' at ' + expLevel + ' level' : ' for an entry-level candidate';
+  verdict += ', with ' + foundSkills.length + ' relevant skills detected. ';
+  verdict += hasNumbers ? 'Good use of quantified achievements — this significantly improves recruiter response rates. ' : 'Adding specific numbers and metrics to achievements would substantially increase impact. ';
+  verdict += hasSummary ? 'The professional summary is in place. ' : 'A professional summary is missing — this is the first section recruiters read. ';
+  verdict += score >= 65 ? 'Focus on keyword density and stronger quantification to break past 80.' : 'Prioritize adding missing sections and quantifying your experience to become ATS-competitive.';
+
+  if (suggestions.length < 4) suggestions.push({ text: 'Use a clean single-column format — avoid tables, text boxes, columns, and graphics for ATS compatibility', category: 'format' });
+
+  return {
+    score: score, isResume: true, verdict: verdict,
+    strengths: strengths.slice(0, 5),
+    weaknesses: weaknesses.slice(0, 4),
+    suggestions: suggestions.slice(0, 6),
+    skills: foundSkills.slice(0, 18),
+    radarScores: radarScores,
+    jobRoles: jobRoles,
+    _offline: true
+  };
 }
 
 function buf2b64(buf) {
@@ -3218,7 +3353,6 @@ function phNewSearch() {
   document.getElementById('phProfession').focus();
   window.scrollTo({ top: 0, behavior: 'smooth' });
 }
-   
 </script>
 </body>
 </html>
